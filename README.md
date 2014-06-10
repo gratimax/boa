@@ -13,4 +13,4 @@ game programming and writing web apps in full python.
     along with some other utilities(mainly JS interop)
 - __boa.dom__: a mapping of the JS dom apis to idomatic Python.
 - __boa.game__: an implementation of some of the pygame libraries, so you can run your games in the browser
-- __boa.tools__: tools for compiling, testing
+- __boa.tools__: tools for compiling, testing, and doing more with your boa apps

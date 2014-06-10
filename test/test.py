@@ -1,5 +1,5 @@
-from boagen.codegen import codegen
-from boagen.scope import Scope
+from boa.gen import codegen
+from boa.gen.scope import Scope
 from os import path
 import ast
 
