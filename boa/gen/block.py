@@ -2,19 +2,21 @@ class Block:
 
     # represents a block of JS code
 
-    def __init__(self, scope):
+    def __init__(self, scope, indent=True):
         # init this block
         self.fragments = []
-        if scope: self.scope = scope;
+        self.indent = indent
+        if scope:
+            self.scope = scope
 
     def add(self, fragment):
         # add a fragment
         if isinstance(fragment, Block):
-            self.fragments += fragment
+            self.fragments.append(fragment)
         else:
             fragment = fragment.split('\n')
             for frag in fragment:
-                self.fragments += frag
+                self.fragments.append(frag)
 
     def insert(self, index, fragment):
         # insert a fragment somewhere
@@ -28,8 +30,11 @@ class Block:
             if isinstance(frag, Block):
                 # add a tab to nested blocks
                 for block_fragment in frag.generate():
-                    frags += "    " + block_fragment
+                    if frag.indent:
+                        frags.append("  " + block_fragment)
+                    else:
+                        frags.append(block_fragment)
             else:
-                frags += frag
+                frags.append(frag)
 
         return frags

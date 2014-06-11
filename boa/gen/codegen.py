@@ -1,5 +1,7 @@
+from boa.gen.block import Block
+from boa.gen.constants import BOA_BUILTINS_CONSTANT_NAME
+from boa.gen.scope import ModuleScope, LocalScope
 from boa.gen.visitor import VisitorTree
-from boa.gen.scope import Scope
 
 import ast
 
@@ -8,111 +10,136 @@ visitorTree = VisitorTree()
 # Compacter syntax
 visitor = visitorTree.visitor
 
-
 # Start as python as a root
 @visitorTree.root
 @visitor(ast.Module)
-def moduleVisitor(node, tree):
-    globalScope = Scope()
-    out = ''
+def module_visitor(node, tree):
+    global_scope = ModuleScope()
+    out = Block(global_scope)
     for expr in node.body:
-        out += tree.decide(expr, globalScope) + ';\n'
-    return globalScope.declarations() + '\n' + out
+        out.add(tree.decide(expr, global_scope))
+    out.insert(0, global_scope.declarations())
+    return '\n'.join(out.generate())
 
 @visitor(ast.Num)
-def numVisitor(node, tree, scope):
-    return 'boa.toPy(' + str(node.n) + ')'
+def num_visitor(node, tree, scope):
+    return BOA_BUILTINS_CONSTANT_NAME + '.to_py(' + str(node.n) + ')'
 
 @visitor(ast.Expr)
-def exprVisitor(node, tree, scope):
+def expr_visitor(node, tree, scope):
     return tree.decide(node.value, scope)
 
 @visitor(ast.Attribute)
-def attributeVisitor(node, tree, scope):
+def attribute_visitor(node, tree, scope):
     return node.attr + '.' + tree.decide(node.value, scope)
 
 @visitor(ast.FunctionDef)
-def functionVisitor(node, tree, scope):
-    localScope = Scope()
-    start = 'function ' + node.name + '(' + \
-            ', '.join(tree.decide(arg, localScope) for arg in node.args.args) + ') {\n'
-    out = ''
+def function_visitor(node, tree, scope):
+    local_scope = LocalScope(scope)
+    out = Block(local_scope, False)
+    out.add('var ' + node.name + ' = function (' +
+            ', '.join(tree.decide(arg, local_scope) for arg in node.args.args)
+            + ') {')
+    body_block = Block(local_scope)
     for expr in node.body:
-        out += '  ' + tree.decide(expr, localScope) + ';\n'
-    out += '}\n'
+        body_block.add(tree.decide(expr, local_scope))
+    out.add(body_block)
+    out.add('}')
     for decorator in node.decorator_list:
-        out += node.name + ' = ' + tree.decide(decorator, scope) + '.__getattr__(\'__call__\')(' + node.name + ');\n'
-    return start + '  ' + localScope.declarations() + '\n' + out
+        out.add(node.name + ' = ' + tree.decide(decorator, scope) +
+                '(' + node.name + ')')
+    decs = local_scope.declarations()
+    if decs:
+        body_block.insert(0, decs)
+    return out
 
 @visitor(ast.Call)
-def callVisitor(node, tree, scope):
-    return tree.decide(node.func, scope) + '.__getattr__(\'__call__\')(' + \
+def call_visitor(node, tree, scope):
+    return tree.decide(node.func, scope) + '(' + \
            ', '.join(tree.decide(arg, scope) for arg in node.args) + ')'
 
 @visitor(ast.If)
-def ifVisitor(node, tree, scope):
-    out = 'if (' + tree.decide(node.test, scope) + ') {\n' + \
-                ';\n'.join(tree.decide(expr, scope) for expr in node.body) + '\n}\n'
+def if_visitor(node, tree, scope):
+    out = Block(scope, False)
+    out.add('if (' + tree.decide(node.test, scope) + ') {')
+
+    if_block = Block(scope)
+    for expr in node.body:
+        if_block.add(tree.decide(expr, scope))
+    out.add(if_block)
+
     if node.orelse:
-        out += 'else {\n' + ';\n'.join(tree.decide(expr, scope) for expr in node.orelse) + '\n}\n'
+        out.add('} else {')
+        else_block = Block(scope)
+        for expr in node.orelse:
+            else_block.add(tree.decide(expr, scope))
+        out.add(else_block)
+        out.add('}')
+    else:
+        out.add('}')
+
     return out
 
 @visitor(ast.For)
-def forVisitor(node, tree, scope):
-    out = 'var $temp = %s;\n for (var $i = 0; $i < $temp.length; $i++) {\nvar %s = $temp[$i];\n;' %\
-          (tree.decide(node.iter, scope), tree.decide(node.target, scope))
+def for_visitor(node, tree, scope):
+    out = Block(scope, False)
+    out.add('builtins$.for_in(%s, function (%s) {'
+            % (tree.decide(node.iter, scope), tree.decide(node.target, scope)))
+    for_block = Block(scope)
     for n in node.body:
-        out += tree.decide(n, scope) + ';\n'
-    return out + '}'
+        for_block.add(tree.decide(n, scope))
+    out.add(for_block)
+
+    out.add('})')
+    return out
 
 @visitor(ast.Print)
-def printVisitor(node, tree, scope):
+def print_visitor(node, tree, scope):
     return 'console.log(' + ', '.join(tree.decide(value, scope) for value in node.values) + ')'
 
 @visitor(ast.Pass)
-def passVisitor(node, tree, scope):
-    return ''
+def pass_visitor(node, tree, scope):
+    return '/* pass */'
 
 @visitor(ast.Str)
-def strVisitor(node, tree, scope):
-    return "boa.toPy(" + repr(node.s) + ")"
+def str_visitor(node, tree, scope):
+    return BOA_BUILTINS_CONSTANT_NAME + ".to_py(" + repr(node.s) + ")"
 
 @visitor(ast.Return)
-def returnVisitor(node, tree, scope):
+def return_visitor(node, tree, scope):
     return 'return ' + tree.decide(node.value, scope)
 
 @visitor(ast.BinOp)
-def binOpVisitor(node, tree, scope):
-    return '(' + tree.decide(node.left, scope) + ')' + \
-           tree.decide(node.op, scope) + \
+def bin_op_visitor(node, tree, scope):
+    return tree.decide(node.left, scope) + tree.decide(node.op, scope) + \
            '(' + tree.decide(node.right, scope) + ')'
 
 @visitor(ast.Add)
-def addVisitor(node, tree, scope):
+def add_visitor(node, tree, scope):
     return '.__add__'
 
 @visitor(ast.Sub)
-def subVisitor(node, tree, scope):
+def sub_visitor(node, tree, scope):
     return '.__sub__'
 
 @visitor(ast.Mult)
-def multVisitor(node, tree, scope):
+def mult_visitor(node, tree, scope):
     return '.__mult__'
 
 @visitor(ast.Div)
-def divVisitor(node, tree, scope):
+def div_visitor(node, tree, scope):
     return '.__div__'
 
 @visitor(ast.Name)
-def nameVisitor(node, tree, scope):
+def name_visitor(node, tree, scope):
     return node.id
 
 @visitor(ast.Assign)
-def assignVisitor(node, tree, scope):
+def assign_visitor(node, tree, scope):
     names = (target.id for target in node.targets)
     value = tree.decide(node.value, scope)
-    out = ''
+    out = Block(scope, False)
     for name in names:
-        scope.assign(name, value)
-        out += name + ' = ' + value + ';\n'
-    return out[0:-2]
+        scope.binding(name, value)
+        out.add(name + ' = ' + value)
+    return out
