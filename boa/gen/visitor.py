@@ -5,7 +5,7 @@ class VisitorTree:
     def __init__(self):
         # create a new tree
         self.visitors = {}
-        self.rootFn = None
+        self.root_fn = None
 
     def visitor(self, *classes):
         # annotation for adding a visitor:
@@ -23,7 +23,7 @@ class VisitorTree:
 
     def root(self, fn):
         # annotation to set the root
-        self.rootFn = fn
+        self.root_fn = fn
         return fn
 
     def decide(self, node, *args):
@@ -36,4 +36,4 @@ class VisitorTree:
 
     def run(self, node):
         # run this tree at the root
-        return self.rootFn(node, self)
+        return self.root_fn(node, self)

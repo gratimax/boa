@@ -1,5 +1,5 @@
 from boa.gen.block import Block
-from boa.gen.constants import BOA_BUILTINS_CONSTANT_NAME
+from boa.gen.constants import BOA_PRELUDE_CONSTANT_NAME
 from boa.gen.scope import ModuleScope, LocalScope
 from boa.gen.visitor import VisitorTree
 
@@ -18,12 +18,11 @@ def module_visitor(node, tree):
     out = Block(global_scope)
     for expr in node.body:
         out.add(tree.decide(expr, global_scope))
-    out.insert(0, global_scope.declarations())
     return '\n'.join(out.generate())
 
 @visitor(ast.Num)
 def num_visitor(node, tree, scope):
-    return BOA_BUILTINS_CONSTANT_NAME + '.to_py(' + str(node.n) + ')'
+    return BOA_PRELUDE_CONSTANT_NAME + '.to_py(' + str(node.n) + ')'
 
 @visitor(ast.Expr)
 def expr_visitor(node, tree, scope):
@@ -31,13 +30,16 @@ def expr_visitor(node, tree, scope):
 
 @visitor(ast.Attribute)
 def attribute_visitor(node, tree, scope):
-    return node.attr + '.' + tree.decide(node.value, scope)
+    return tree.decide(node.value, scope)  + '.' + node.attr
 
 @visitor(ast.FunctionDef)
 def function_visitor(node, tree, scope):
     local_scope = LocalScope(scope)
     out = Block(local_scope, False)
-    out.add('var ' + node.name + ' = function (' +
+    for arg in node.args.args:
+        local_scope.binding(arg.id, None)
+    scope.binding(node.name, None)
+    out.add(scope.refer(node.name) + ' = function (' +
             ', '.join(tree.decide(arg, local_scope) for arg in node.args.args)
             + ') {')
     body_block = Block(local_scope)
@@ -48,15 +50,12 @@ def function_visitor(node, tree, scope):
     for decorator in node.decorator_list:
         out.add(node.name + ' = ' + tree.decide(decorator, scope) +
                 '(' + node.name + ')')
-    decs = local_scope.declarations()
-    if decs:
-        body_block.insert(0, decs)
     return out
 
 @visitor(ast.Call)
 def call_visitor(node, tree, scope):
     return tree.decide(node.func, scope) + '(' + \
-           ', '.join(tree.decide(arg, scope) for arg in node.args) + ')'
+        ', '.join(tree.decide(arg, scope) for arg in node.args) + ')'
 
 @visitor(ast.If)
 def if_visitor(node, tree, scope):
@@ -82,12 +81,14 @@ def if_visitor(node, tree, scope):
 
 @visitor(ast.For)
 def for_visitor(node, tree, scope):
-    out = Block(scope, False)
-    out.add('builtins$.for_in(%s, function (%s) {'
-            % (tree.decide(node.iter, scope), tree.decide(node.target, scope)))
-    for_block = Block(scope)
+    local_scope = LocalScope(scope)
+    out = Block(local_scope, False)
+    local_scope.binding(node.target.id, None)
+    out.add(BOA_PRELUDE_CONSTANT_NAME + '.for_in(%s, function (%s) {'
+            % (tree.decide(node.iter, local_scope), tree.decide(node.target, local_scope)))
+    for_block = Block(local_scope)
     for n in node.body:
-        for_block.add(tree.decide(n, scope))
+        for_block.add(tree.decide(n, local_scope))
     out.add(for_block)
 
     out.add('})')
@@ -103,7 +104,34 @@ def pass_visitor(node, tree, scope):
 
 @visitor(ast.Str)
 def str_visitor(node, tree, scope):
-    return BOA_BUILTINS_CONSTANT_NAME + ".to_py(" + repr(node.s) + ")"
+    if node.s.startswith('~js'):
+        out = Block(scope, False)
+        rest = node.s[3:]
+        if rest[0] == '\n':
+            rest = rest[1:]
+
+        spaces = ''
+        for char in rest:
+            if char == ' ' or char == '\t':
+                spaces += char
+            else:
+                break
+
+        if rest.endswith(spaces):
+            rest = rest[:-len(spaces)]
+
+        if rest[-1] == '\n':
+            rest = rest[:-1]
+
+        rest = rest.split('\n')
+        for line in rest:
+            if line.startswith(spaces):
+                line = line[len(spaces):]
+            out.add(line)
+
+        return out
+    else:
+        return BOA_PRELUDE_CONSTANT_NAME + ".to_py(" + repr(node.s) + ")"
 
 @visitor(ast.Return)
 def return_visitor(node, tree, scope):
@@ -111,28 +139,29 @@ def return_visitor(node, tree, scope):
 
 @visitor(ast.BinOp)
 def bin_op_visitor(node, tree, scope):
-    return tree.decide(node.left, scope) + tree.decide(node.op, scope) + \
-           '(' + tree.decide(node.right, scope) + ')'
+    return BOA_PRELUDE_CONSTANT_NAME + '.' + tree.decide(node.op, scope) + \
+           '(' + tree.decide(node.left, scope) + ', ' + \
+           tree.decide(node.right, scope) + ')'
 
 @visitor(ast.Add)
 def add_visitor(node, tree, scope):
-    return '.__add__'
+    return 'add'
 
 @visitor(ast.Sub)
 def sub_visitor(node, tree, scope):
-    return '.__sub__'
+    return 'sub'
 
 @visitor(ast.Mult)
 def mult_visitor(node, tree, scope):
-    return '.__mult__'
+    return 'mult'
 
 @visitor(ast.Div)
 def div_visitor(node, tree, scope):
-    return '.__div__'
+    return 'div'
 
 @visitor(ast.Name)
 def name_visitor(node, tree, scope):
-    return node.id
+    return scope.refer(node.id)
 
 @visitor(ast.Assign)
 def assign_visitor(node, tree, scope):
@@ -141,5 +170,5 @@ def assign_visitor(node, tree, scope):
     out = Block(scope, False)
     for name in names:
         scope.binding(name, value)
-        out.add(name + ' = ' + value)
+        out.add(scope.refer(name) + ' = ' + value)
     return out

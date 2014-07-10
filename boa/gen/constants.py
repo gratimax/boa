@@ -3,8 +3,9 @@
 # constant for name for which the current module is accessed
 BOA_MODULE_CONSTANT_NAME = 'module$'
 
-# constant for imports of a module
-BOA_IMPORTS_CONSTANT_NAME = 'imports$'
+# constant for boa builtins
+BOA_PRELUDE_CONSTANT_NAME = 'prelude$'
 
-# constant for builtins
-BOA_BUILTINS_CONSTANT_NAME = 'builtins$'
+# constant for import function
+BOA_IMPORT_FN_CONSTANT_NAME = 'do_import$'
+

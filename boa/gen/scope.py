@@ -1,4 +1,4 @@
-from boa.gen.constants import BOA_MODULE_CONSTANT_NAME
+from boa.gen.constants import BOA_MODULE_CONSTANT_NAME, BOA_IMPORTS_CONSTANT_NAME
 
 
 class Binding(object):
@@ -23,7 +23,7 @@ class Scope(object):
         # add a bindings
         binding = self.get_binding(name)
         if binding is not None:
-            binding['val'] = val
+            binding.val = val
         else:
             self.add_binding(Binding(name, val))
 
@@ -45,9 +45,9 @@ class Scope(object):
         if binding:
             return binding.name
 
-    def declarations(self):
+    #def declarations(self):
         # get the declarations
-        return 'var ' + ', '.join(x.name for x in self.bindings) if len(self.bindings) > 0 else ''
+        #return 'var ' + ', '.join(x.name for x in self.bindings) if len(self.bindings) > 0 else ''
 
 
 class ModuleScope(Scope):
@@ -60,6 +60,8 @@ class ModuleScope(Scope):
 
         if binding:
             return BOA_MODULE_CONSTANT_NAME + '.' + binding.name
+        else:
+            return BOA_IMPORTS_CONSTANT_NAME + '.' + name
 
 
 class LocalScope(Scope):
@@ -78,3 +80,12 @@ class LocalScope(Scope):
                 return x
         # check the parent's binding
         return self.parent.get_binding(name)
+
+    def refer(self, name):
+        # a binding is referred to by the local scope object
+        binding = self.get_binding(name)
+
+        if binding:
+            return binding.name
+        else:
+            return self.parent.refer(name)
