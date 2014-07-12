@@ -1,4 +1,4 @@
-from boa.gen.constants import BOA_MODULE_CONSTANT_NAME, BOA_IMPORTS_CONSTANT_NAME
+from boa.gen.constants import BOA_MODULE_CONSTANT_NAME
 
 
 class Binding(object):
@@ -61,7 +61,7 @@ class ModuleScope(Scope):
         if binding:
             return BOA_MODULE_CONSTANT_NAME + '.' + binding.name
         else:
-            return BOA_IMPORTS_CONSTANT_NAME + '.' + name
+            return BOA_MODULE_CONSTANT_NAME + '.' + name
 
 
 class LocalScope(Scope):
